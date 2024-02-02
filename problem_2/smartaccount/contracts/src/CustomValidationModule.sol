@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
-import {BaseAuthorizationModule} from "./BaseAuthorizationModule.sol";
+import {EcdsaOwnershipRegistryModule} from "./EcdsaOwnershipRegistryModule.sol";
 import {UserOperation} from "@account-abstraction/contracts/interfaces/UserOperation.sol";
 
-contract CustomeValidationModule is BaseAuthorizationModule {
+contract CustomValidationModule is EcdsaOwnershipRegistryModule {
     string public constant NAME = "TransactionLimiter";
     string public constant VERSION = "0.0.1";
 
     error LimitReached(address user, uint128 limit);
     error CanNotBeZero();
+    error NotEOAOwner();
 
     uint128 public limitValue;
     uint128 public transactionsLimit;
@@ -17,21 +18,18 @@ contract CustomeValidationModule is BaseAuthorizationModule {
     mapping(address => uint128) internal dailyNbTransactions;
     mapping(address => uint256) internal lastTransactionTime;
 
-    /**
-        Smart contract account calls this function with msg.sender as smart account address
-        It updates the relevant storage for the msg sender, It could be ownership information as mentioned in ECDSAOwnsership Module.
-        The function signature of this method will be used as moduleSetupData in Account Factory
-    */
-    function initForSmartAccount(
+    modifier onlyEOAOwner() {
+        if (_smartAccountOwners[msg.sender] != msg.sender) revert NotEOAOwner();
+        _;
+    }
+
+    function setLimits(
         uint128 _limitValue,
         uint128 _transactionsLimit
-    ) external returns (address) {
-        if (_limitValue == 0) revert CanNotBeZero();
-        if (_transactionsLimit == 0) revert CanNotBeZero();
+    ) external onlyEOAOwner {
+        if (_limitValue == 0 || _transactionsLimit == 0) revert CanNotBeZero();
         limitValue = _limitValue;
         transactionsLimit = _transactionsLimit;
-        startDate = block.timestamp;
-        return address(this);
     }
 
     /**
@@ -41,15 +39,13 @@ contract CustomeValidationModule is BaseAuthorizationModule {
      * @param smartAccount expected signer Smart Account address.
      * @return true if signature is valid, false otherwise.
      */
-
-    // if user sends one transaction then :
-    // - encodeExecute(to, value, data)
-    // ethers.id("execute_ncC(address,uint256,bytes)") => '0x0000189aa837583008638f6cac2ce6b55733abf2489048e3ebd2e2b11e6e2837'
-    function _verifySignature(
+    function _verifyCallSignature(
         bytes32 dataHash,
         bytes memory signature,
         bytes calldata callData
-    ) internal view returns (bool) {
+    ) internal returns (bool) {
+        if (limitValue == 0 || transactionsLimit == 0) revert CanNotBeZero();
+
         require(callData.length >= 68, "Calldata too short");
 
         bytes4 functionId = bytes4(callData[:4]);
@@ -60,37 +56,45 @@ contract CustomeValidationModule is BaseAuthorizationModule {
             signature
         );
 
-        uint128 value = abi.decode(data[36:68], (uint128));
+        uint128 value = abi.decode(callData[36:68], (uint128));
 
         if (value > limitValue) revert LimitReached(userSigner, limitValue);
 
-        if (
-            (block.timestamp - lastTransactionTime[userSigner]) >=
-            DAY_IN_SECONDS
-        ) {
-            dailyTransactionCount[user] = 0;
+        updateTransactionCount(userSigner);
+        return true;
+    }
+
+    function updateTransactionCount(address user) private {
+        if ((block.timestamp - lastTransactionTime[user]) >= DAY_IN_SECONDS) {
+            dailyNbTransactions[user] = 0;
         }
+        if (dailyNbTransactions[user] >= transactionsLimit)
+            revert LimitReached(user, transactionsLimit);
 
-        require(
-            dailyTransactionCount[userSigner] < transactionsLimit,
-            LimitReached(userSigner, transactionsLimit)
-        );
-
-        dailyTransactionCount[userSigner]++;
-        lastTransactionTime[userSigner] = block.timestamp;
+        dailyNbTransactions[user]++;
+        lastTransactionTime[user] = block.timestamp;
     }
 
     function validateUserOp(
         UserOperation calldata userOp,
         bytes32 userOpHash
-    ) external view virtual override returns (uint256) {
+    ) external virtual override returns (uint256) {
         (bytes memory moduleSignature, ) = abi.decode(
             userOp.signature,
             (bytes, address)
         );
-        if (_verifySignature(userOpHash, moduleSignature, userOp.callData)) {
-            return VALIDATION_SUCCESS;
+        if (_verifySignature(userOpHash, moduleSignature, userOp.sender)) {
+            if (
+                _verifyCallSignature(
+                    userOpHash,
+                    moduleSignature,
+                    userOp.callData
+                )
+            ) {
+                return VALIDATION_SUCCESS;
+            }
         }
+
         return SIG_VALIDATION_FAILED;
     }
 
