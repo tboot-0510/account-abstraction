@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
-import {EcdsaOwnershipRegistryModule} from "./EcdsaOwnershipRegistryModule.sol";
+pragma solidity 0.8.17;
+import {BaseAuthorizationModule} from "./BaseAuthorizationModule.sol";
 import {UserOperation} from "@account-abstraction/contracts/interfaces/UserOperation.sol";
 
-contract CustomValidationModule is EcdsaOwnershipRegistryModule {
+contract CustomValidationModule is BaseAuthorizationModule {
     string public constant NAME = "TransactionLimiter";
     string public constant VERSION = "0.0.1";
 
@@ -18,28 +18,23 @@ contract CustomValidationModule is EcdsaOwnershipRegistryModule {
     mapping(address => uint128) internal dailyNbTransactions;
     mapping(address => uint256) internal lastTransactionTime;
 
-    modifier onlyEOAOwner() {
-        if (_smartAccountOwners[msg.sender] != msg.sender) revert NotEOAOwner();
-        _;
-    }
-
-    function setLimits(
+    function initForSmartAccount(
         uint128 _limitValue,
         uint128 _transactionsLimit
-    ) external onlyEOAOwner {
+    ) external returns (address) {
         if (_limitValue == 0 || _transactionsLimit == 0) revert CanNotBeZero();
         limitValue = _limitValue;
         transactionsLimit = _transactionsLimit;
+        return address(this);
     }
 
     /**
      * @param dataHash Hash of the data to be validated.
      * @param signature Signature to be validated.
      * @param callData userOps callData.
-     * @param smartAccount expected signer Smart Account address.
      * @return true if signature is valid, false otherwise.
      */
-    function _verifyCallSignature(
+    function _verifySignature(
         bytes32 dataHash,
         bytes memory signature,
         bytes calldata callData
@@ -60,11 +55,35 @@ contract CustomValidationModule is EcdsaOwnershipRegistryModule {
 
         if (value > limitValue) revert LimitReached(userSigner, limitValue);
 
-        updateTransactionCount(userSigner);
         return true;
     }
 
-    function updateTransactionCount(address user) private {
+    // function recoverAccess(address payable _wallet, address _newOwner) public {
+    //     // require(onlyFriends(_wallet, msg.sender), "sender not a friend");
+    //     bytes32 recoveryHash = getRecoveryHash(
+    //         _wallet,
+    //         _newOwner,
+    //         _walletsNonces[_wallet]
+    //     );
+    //     require(
+    //         isConfirmedByRequiredFriends(recoveryHash, _wallet),
+    //         "Not enough confirmations"
+    //     );
+    //     SmartAccount smartAccount = SmartAccount(payable(_wallet));
+    //     require(
+    //         smartAccount.execTransactionFromModule(
+    //             _wallet,
+    //             0,
+    //             // abi.encodeCall("setOwner", (newOwner)),
+    //             abi.encodeWithSignature("setOwner(address)", _newOwner),
+    //             Enum.Operation.Call
+    //         ),
+    //         "Could not execute recovery"
+    //     );
+    //     _walletsNonces[_wallet]++;
+    // }
+
+    function updateTransactionCount(address user) public {
         if ((block.timestamp - lastTransactionTime[user]) >= DAY_IN_SECONDS) {
             dailyNbTransactions[user] = 0;
         }
@@ -83,16 +102,9 @@ contract CustomValidationModule is EcdsaOwnershipRegistryModule {
             userOp.signature,
             (bytes, address)
         );
-        if (_verifySignature(userOpHash, moduleSignature, userOp.sender)) {
-            if (
-                _verifyCallSignature(
-                    userOpHash,
-                    moduleSignature,
-                    userOp.callData
-                )
-            ) {
-                return VALIDATION_SUCCESS;
-            }
+
+        if (_verifySignature(userOpHash, moduleSignature, userOp.callData)) {
+            return VALIDATION_SUCCESS;
         }
 
         return SIG_VALIDATION_FAILED;

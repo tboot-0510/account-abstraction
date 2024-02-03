@@ -3,8 +3,8 @@ pragma solidity 0.8.17;
 
 /* solhint-disable no-empty-blocks */
 
-import {IAuthorizationModule} from "./interfaces/IAuthorizationModule.sol";
-import {ISignatureValidator} from "./interfaces/ISignatureValidator.sol";
+import {IAuthorizationModule} from "../interfaces/IAuthorizationModule.sol";
+import {ISignatureValidator} from "../interfaces/ISignatureValidator.sol";
 
 contract AuthorizationModulesConstants {
     uint256 internal constant VALIDATION_SUCCESS = 0;

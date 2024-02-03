@@ -45,6 +45,18 @@
   dependencies:
     regenerator-runtime "^0.14.0"
 
+"@biconomy-devx/account-contracts-v2@^2.0.3":
+  version "2.0.3"
+  resolved "https://registry.yarnpkg.com/@biconomy-devx/account-contracts-v2/-/account-contracts-v2-2.0.3.tgz#df8ee507b3c9fa4db3a8f6d729fe2dc97057be06"
+  integrity sha512-tv5KfzkyEwfuV+Hcl25/KjR2mXupPDRt55hTPMTGUagaAXjO9XNmQm5Ac1D0GMDN8ZHshAd6ytSRADLYhKZsLA==
+  dependencies:
+    "@account-abstraction/contracts" "^0.6.0"
+    "@ethersproject/abstract-signer" "^5.6.2"
+    "@ethersproject/constants" "^5.6.1"
+    axios "^1.4.0"
+    dotenv "^16.0.3"
+    ethereumjs-util "^7.1.0"
+
 "@biconomy-devx/account-contracts-v2@npm:@biconomy-devx/account-contracts-v2@^1.0.0":
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/@biconomy-devx/account-contracts-v2/-/account-contracts-v2-1.0.1.tgz#12365978fb703ff71d57c2c98a2c307c6ff08197"
