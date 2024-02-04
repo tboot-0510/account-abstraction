@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { ReentrancyGuard } from "../../common/ReentrancyGuard.sol";
 import { Enum } from "../../common/Enum.sol";
 
 interface ISmartAccount {
@@ -20,7 +18,7 @@ interface ITxLimiterExecutionModule {
     error LimitReached(address user, uint128 limit);
 }
 
-contract TxLimiterExecutionModule is Ownable, ReentrancyGuard, ITxLimiterExecutionModule {
+contract TxLimiterExecutionModule is ITxLimiterExecutionModule {
     mapping(address => uint256) public transactionCount;
 
     ISmartAccount public immutable smartAccount;

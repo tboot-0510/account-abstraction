@@ -1,31 +1,32 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
-import {Test} from "../lib/forge-std/src/Test.sol";
-import {console} from "../lib/forge-std/src/console.sol";
-import {EntryPoint} from "@account-abstraction/contracts/core/EntryPoint.sol";
-import {SmartAccount} from "../src/SmartAccount.sol";
-import {SmartAccountFactory} from "../src/SmartAccountFactory.sol";
-import {EcdsaOwnershipRegistryModule} from "../src/modules/EcdsaOwnershipRegistryModule.sol";
-import {SmartContractOwnershipRegistryModule} from "../src/modules/SmartContractOwnershipRegistryModule.sol";
-import {UserOperation} from "../lib/account-abstraction/contracts/interfaces/UserOperation.sol";
-import {MockERC20} from "./Mocks/MockERC20.sol";
+import { Test } from "../lib/forge-std/src/Test.sol";
+import { console } from "../lib/forge-std/src/console.sol";
+import { EntryPoint } from "@account-abstraction/contracts/core/EntryPoint.sol";
+import { SmartAccount } from "../src/SmartAccount.sol";
+import { SmartAccountFactory } from "../src/SmartAccountFactory.sol";
+import { EcdsaOwnershipRegistryModule } from "../src/modules/EcdsaOwnershipRegistryModule.sol";
+import { SmartContractOwnershipRegistryModule } from "../src/modules/SmartContractOwnershipRegistryModule.sol";
+import { UserOperation } from "../lib/account-abstraction/contracts/interfaces/UserOperation.sol";
 
-import {ERC4337Utils} from "../src/ERC4337Utils.sol";
-import {ECDSA} from "../lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
+import { ERC4337Utils } from "../src/ERC4337Utils.sol";
+import { ECDSA } from "../lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 
-import {IERC20} from "../lib/openzeppelin-contracts/contracts/interfaces/IERC20.sol";
-import {IEntryPoint} from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
-
+import { IERC20 } from "../lib/openzeppelin-contracts/contracts/interfaces/IERC20.sol";
+import { IEntryPoint } from "@account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
 interface ISAFactory {
-    function deployCounterFactualAccount(address moduleSetupContract, bytes calldata moduleSetupData, uint256 index)
-        external
-        returns (address proxy);
+    function deployCounterFactualAccount(
+        address moduleSetupContract,
+        bytes calldata moduleSetupData,
+        uint256 index
+    ) external returns (address proxy);
 
-    function deployAccount(address moduleSetupContract, bytes calldata moduleSetupData)
-        external
-        returns (address proxy);
+    function deployAccount(
+        address moduleSetupContract,
+        bytes calldata moduleSetupData
+    ) external returns (address proxy);
 
     function getAddressForCounterFactualAccount(
         address moduleSetupContract,
@@ -34,7 +35,7 @@ interface ISAFactory {
     ) external view returns (address _account);
 }
 
-interface IECDSARegistryModule{
+interface IECDSARegistryModule {
     function getOwner(address smartAccount) external view returns (address);
 }
 
@@ -60,7 +61,6 @@ contract TransactionLimiterModuleTest is Test {
     SmartAccountFactory public smartAccountFactory;
     SmartContractOwnershipRegistryModule public scwOwnershipRegistryModule;
     EcdsaOwnershipRegistryModule public ecdsaOwnershipRegistryModule;
-    
 
     // This function is called before every test case
     function setUp() public {
@@ -73,15 +73,14 @@ contract TransactionLimiterModuleTest is Test {
         smartAccountFactory = new SmartAccountFactory(address(smartAccountImplementation));
         scwOwnershipRegistryModule = new SmartContractOwnershipRegistryModule();
         ecdsaOwnershipRegistryModule = new EcdsaOwnershipRegistryModule();
-        mockToken = new MockERC20("Mock","Mock");
-        
+        mockToken = new MockERC20("Mock", "Mock");
 
         // Fund all contracts
-        vm.deal(entryPointAdr,5 ether);
-        vm.deal(ecdsaOwnershipModuleAddress,5 ether);
-        vm.deal(smartAccountFactoryAddress,5 ether);
+        vm.deal(entryPointAdr, 5 ether);
+        vm.deal(ecdsaOwnershipModuleAddress, 5 ether);
+        vm.deal(smartAccountFactoryAddress, 5 ether);
         vm.deal(smartContractOwnershipModuleAddress, 5 ether);
-        
+
         // Set Addresses
         ecdsaOwnershipModuleAddress = address(ecdsaOwnershipRegistryModule);
         smartContractOwnershipModuleAddress = address(scwOwnershipRegistryModule);
@@ -96,9 +95,11 @@ contract TransactionLimiterModuleTest is Test {
         // Deploy SA with smartAccountOwner as owner and fund it with 5 ether
         bytes memory txnData1 = abi.encodeWithSignature("initForSmartAccount(address)", smartAccountOwner);
         userSA = ISAFactory(smartAccountFactoryAddress).deployCounterFactualAccount(
-            ecdsaOwnershipModuleAddress, txnData1, smartAccountDeploymentIndex
+            ecdsaOwnershipModuleAddress,
+            txnData1,
+            smartAccountDeploymentIndex
         );
-        vm.deal(userSA,5 ether);
+        vm.deal(userSA, 5 ether);
     }
 
     // Deployment of Smart Account with ECDSA Auth Module
@@ -106,21 +107,25 @@ contract TransactionLimiterModuleTest is Test {
         bytes memory txnData = abi.encodeWithSignature("initForSmartAccount(address)", alice);
         uint256 prevGas = gasleft();
         address newUserSA = ISAFactory(smartAccountFactoryAddress).deployCounterFactualAccount(
-            ecdsaOwnershipModuleAddress, txnData, smartAccountDeploymentIndex
+            ecdsaOwnershipModuleAddress,
+            txnData,
+            smartAccountDeploymentIndex
         );
-        console.logUint(prevGas-gasleft());
-        console.log("ECDSA Module :: Gas required in deploying Smart-Account-Wallet with ECDSA Auth Module is mentioned above: ");
+        console.logUint(prevGas - gasleft());
+        console.log(
+            "ECDSA Module :: Gas required in deploying Smart-Account-Wallet with ECDSA Auth Module is mentioned above: "
+        );
 
         // INVARIANT ==> SmartAccountOwner is set as owner of userSA
-        assertEq(alice,IECDSARegistryModule(ecdsaOwnershipModuleAddress).getOwner(newUserSA));
+        assertEq(alice, IECDSARegistryModule(ecdsaOwnershipModuleAddress).getOwner(newUserSA));
     }
 
     /*  HELPER FUNCTIONS FOR CONSTRUCTING AND SIGNING USER-OP   */
-    function fillUserOp(EntryPoint _entryPoint, address _sender, bytes memory _data)
-        internal
-        view
-        returns (UserOperation memory op)
-    {
+    function fillUserOp(
+        EntryPoint _entryPoint,
+        address _sender,
+        bytes memory _data
+    ) internal view returns (UserOperation memory op) {
         op.sender = _sender;
         op.nonce = _entryPoint.getNonce(_sender, 0);
         op.callData = _data;
@@ -131,7 +136,7 @@ contract TransactionLimiterModuleTest is Test {
         op.maxPriorityFeePerGas = 1;
     }
 
-    function getSender(UserOperation memory userOp) internal pure returns (address){
+    function getSender(UserOperation memory userOp) internal pure returns (address) {
         return userOp.sender;
     }
 
@@ -147,13 +152,19 @@ contract TransactionLimiterModuleTest is Test {
         uint256 maxPriorityFeePerGas = userOp.maxPriorityFeePerGas;
         bytes32 hashPaymasterAndData = keccak256(userOp.paymasterAndData);
 
-        return abi.encode(
-            sender, nonce,
-            hashInitCode, hashCallData,
-            callGasLimit, verificationGasLimit, preVerificationGas,
-            maxFeePerGas, maxPriorityFeePerGas,
-            hashPaymasterAndData
-        );
+        return
+            abi.encode(
+                sender,
+                nonce,
+                hashInitCode,
+                hashCallData,
+                callGasLimit,
+                verificationGasLimit,
+                preVerificationGas,
+                maxFeePerGas,
+                maxPriorityFeePerGas,
+                hashPaymasterAndData
+            );
     }
 
     function hash(UserOperation memory userOp) internal pure returns (bytes32) {
