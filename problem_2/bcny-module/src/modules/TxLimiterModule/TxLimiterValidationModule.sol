@@ -3,6 +3,7 @@ pragma solidity 0.8.17;
 
 import { BaseAuthorizationModule } from "../BaseAuthorizationModule.sol";
 import { UserOperation } from "@account-abstraction/contracts/interfaces/UserOperation.sol";
+
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 interface ITxLimiterValidationModule {
@@ -26,20 +27,20 @@ contract TxLimiterValidationModule is BaseAuthorizationModule, ITxLimiterValidat
     string public constant NAME = "TransactionLimiter";
     string public constant VERSION = "0.0.1";
 
-    bytes4 constant SCA_EXECUTE = bytes4(
-        keccak256("execute(address,uint256,bytes)")
-    );
+    bytes4 constant SCA_EXECUTE = bytes4(keccak256("execute(address,uint256,bytes)"));
 
-    bytes4 constant SCA_EXECUTE_OPTIMIZED = bytes4(
-        keccak256("execute_ncC(address,uint256,bytes)")
-    );
+    bytes4 constant SCA_EXECUTE_OPTIMIZED = bytes4(keccak256("execute_ncC(address,uint256,bytes)"));
 
-    mapping(address => LimiterSettings) internal _smartAccountSettings;
+    mapping(address => LimiterSettings) public _smartAccountSettings;
 
     ITxLimiterExecutionModule public immutable txLimiterExecutionContract;
 
     constructor(address executionContract) {
         txLimiterExecutionContract = ITxLimiterExecutionModule(executionContract);
+    }
+
+    function getLimits(address user) public view returns (LimiterSettings memory) {
+        return _smartAccountSettings[user];
     }
 
     function initForSmartAccount(uint128 _limitValue, uint128 _transactionsLimit) external returns (address) {
@@ -55,25 +56,27 @@ contract TxLimiterValidationModule is BaseAuthorizationModule, ITxLimiterValidat
         bytes memory signature,
         address smartAccount
     ) internal view returns (bool) {
-        address userSigner = (dataHash.toEthSignedMessageHash()).recover(signature);
+        (bytes memory signatureWithValues, bytes memory valueBytes) = abi.decode(signature, (bytes, bytes));
 
+        address userSigner = (dataHash.toEthSignedMessageHash()).recover(signatureWithValues);
         if (userSigner != smartAccount) return false;
 
-        (uint256 value, ) = abi.decode(signature, (uint256, bytes));
+        uint256 transactionValue = abi.decode(valueBytes, (uint256));
 
         LimiterSettings storage settings = _smartAccountSettings[smartAccount];
         if (settings.limitValue == 0 || settings.transactionsLimit == 0) revert CanNotBeZero();
 
-        if (uint128(value) > settings.limitValue) revert LimitReached(userSigner, settings.limitValue);
+        if (uint128(transactionValue) > settings.limitValue) revert LimitReached(userSigner, settings.limitValue);
 
-        if (!txLimiterExecutionContract.validTxCount(userSigner, settings.transactionsLimit)) revert LimitReached(userSigner, settings.transactionsLimit);
+        if (!txLimiterExecutionContract.validTxCount(userSigner, settings.transactionsLimit))
+            revert LimitReached(userSigner, settings.transactionsLimit);
 
         return true;
     }
 
     function decodeUserOpCallData(
         bytes calldata userOpCalldata
-    ) pure private returns (address dest, bytes4 selector, bytes calldata data, uint256 callValue) {
+    ) private pure returns (address dest, bytes4 selector, bytes calldata data, uint256 callValue) {
         bytes4 scaSelector = bytes4(userOpCalldata[:4]);
 
         if (scaSelector != SCA_EXECUTE && scaSelector != SCA_EXECUTE_OPTIMIZED) {
@@ -92,7 +95,10 @@ contract TxLimiterValidationModule is BaseAuthorizationModule, ITxLimiterValidat
         data = userOpCalldata[136:];
     }
 
-    function validateUserOp(UserOperation calldata userOp, bytes32 userOpHash) external virtual override returns (uint256) {
+    function validateUserOp(
+        UserOperation calldata userOp,
+        bytes32 userOpHash
+    ) external virtual override returns (uint256) {
         (bytes memory moduleSignature, ) = abi.decode(userOp.signature, (bytes, address));
 
         if (_verifySignature(userOpHash, moduleSignature, userOp.sender)) {
@@ -106,8 +112,7 @@ contract TxLimiterValidationModule is BaseAuthorizationModule, ITxLimiterValidat
         bytes32 dataHash,
         bytes memory moduleSignature
     ) public view virtual override returns (bytes4) {
-        return
-            isValidSignatureForAddress(dataHash, moduleSignature, msg.sender);
+        return isValidSignatureForAddress(dataHash, moduleSignature, msg.sender);
     }
 
     function isValidSignatureForAddress(
@@ -117,13 +122,7 @@ contract TxLimiterValidationModule is BaseAuthorizationModule, ITxLimiterValidat
     ) public view virtual returns (bytes4) {
         if (
             _verifySignature(
-                keccak256(
-                    abi.encodePacked(
-                        "\x19Ethereum Signed Message:\n52",
-                        dataHash,
-                        smartAccount
-                    )
-                ),
+                keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n52", dataHash, smartAccount)),
                 moduleSignature,
                 smartAccount
             )
@@ -133,16 +132,8 @@ contract TxLimiterValidationModule is BaseAuthorizationModule, ITxLimiterValidat
         return bytes4(0xffffffff);
     }
 
-    function isValidSignatureUnsafe(
-        bytes32 dataHash,
-        bytes memory moduleSignature
-    ) public virtual returns (bytes4) {
-        return
-            isValidSignatureForAddressUnsafe(
-                dataHash,
-                moduleSignature,
-                msg.sender
-            );
+    function isValidSignatureUnsafe(bytes32 dataHash, bytes memory moduleSignature) public virtual returns (bytes4) {
+        return isValidSignatureForAddressUnsafe(dataHash, moduleSignature, msg.sender);
     }
 
     function isValidSignatureForAddressUnsafe(
@@ -155,5 +146,4 @@ contract TxLimiterValidationModule is BaseAuthorizationModule, ITxLimiterValidat
         }
         return bytes4(0xffffffff);
     }
-
 }
