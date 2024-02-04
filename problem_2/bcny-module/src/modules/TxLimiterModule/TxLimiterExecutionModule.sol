@@ -45,6 +45,7 @@ contract TxLimiterExecutionModule is Ownable, ReentrancyGuard, ITxLimiterExecuti
     function updateTxCount(address user) private {
         if ((block.timestamp - lastTransactionTime[user]) >= DAY_IN_SECONDS) {
             transactionCount[user] = 0;
+            lastTransactionTime[user] = block.timestamp;
             return;
         }
 
