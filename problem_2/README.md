@@ -29,7 +29,7 @@ The design of a module is twofold:
       - Then we check the storage of ```executionContract``` to see if it reached the threshold transaction limit
         - If yes revert
         - Else continue
-2) Create an execution smart contract that updates the counter for each transaction and executes the associated transaction
+2) Add execution module that updates the counter for each transaction and executes the associated transaction
    a) Following the diagram @Execution Modules
      - Implement the ```executeTransaction``` function from the ```ModuleManager.sol``` inherited by ```SmartAccount.sol```
      - The transaction is already validated in the previous step, so we only execute the ```execTransactionFromModule``` from ```SmartAccount.sol```
